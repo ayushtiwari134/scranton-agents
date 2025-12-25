@@ -1,6 +1,10 @@
 from pydantic import BaseModel
+from typing import Optional
 
-class AddState(BaseModel):
-    a: int
-    b: int
-    result: int | None = None
+class AgentState(BaseModel):
+    """
+    Shared LangGraph state for the agent.
+    """
+
+    user_input: str
+    response: Optional[str] = None

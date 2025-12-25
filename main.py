@@ -1,4 +1,4 @@
-from app.graph import build_graph
+from app.graph.graph import build_graph
 from app.state import AddState
 from app.logger import setup_logger
 

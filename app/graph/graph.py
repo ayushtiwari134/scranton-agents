@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
 from app.state import AddState
-from app.nodes import add_numbers
+from app.graph.nodes import add_numbers
 from app.logger import setup_logger
 
 logger = setup_logger().bind(name='GRAPH')

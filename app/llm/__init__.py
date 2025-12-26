@@ -3,7 +3,6 @@ from app.config import load_config
 from app.llm.client import LLMClient
 from app.llm.providers import GeminiClient
 
-
 def get_llm() -> LLMClient:
     """
     Factory method for initializing the configured LLM client.

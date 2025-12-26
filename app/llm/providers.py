@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 from app.llm.client import LLMClient
 from app.logger import setup_logger
 
@@ -7,7 +7,7 @@ logger = setup_logger().bind(name="LLM")
 
 class GeminiClient(LLMClient):
     """
-    Gemini LLM client implementation.
+    Gemini LLM client using the new google.genai SDK.
     """
 
     def __init__(self, api_key: str, model: str, temperature: float):
@@ -16,24 +16,31 @@ class GeminiClient(LLMClient):
 
         Args:
             api_key (str): Gemini API key.
-            model (str): Model identifier.
+            model (str): Gemini model identifier.
             temperature (float): Sampling temperature.
         """
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model)
+        self.client = genai.Client(api_key=api_key)
+        self.model = model
         self.temperature = temperature
 
         logger.success(f"Gemini initialized | model={model} | temp={temperature}")
 
     def generate(self, prompt: str) -> str:
         """
-        Sends a prompt to Gemini and returns the generated text.
+        Generates text using Gemini.
+
+        Args:
+            prompt (str): Input prompt.
+
+        Returns:
+            str: Generated response text.
         """
         logger.info("Sending prompt to Gemini")
 
-        response = self.model.generate_content(
-            prompt,
-            generation_config={"temperature": self.temperature},
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config={"temperature": self.temperature},
         )
 
         text = response.text.strip()

@@ -1,18 +1,25 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from app.graph.graph import build_graph
-from app.state import AddState
+from app.state import AgentState
 from app.logger import setup_logger
 
-logger = setup_logger().bind(name='MAIN')
+
+logger = setup_logger().bind(name="MAIN")
+
 
 def main():
     logger.info("Starting the application...")
 
     graph = build_graph()
 
-    final_state = graph.invoke({'a': 5, 'b': 7})
+    final_state = graph.invoke({"user_input": "What is the capital of France?"})
 
     logger.info(f"Final State: {final_state}")
     logger.success("Application finished.")
+
 
 if __name__ == "__main__":
     main()

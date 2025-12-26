@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
-from app.state import AddState
-from app.graph.nodes import add_numbers
+from app.state import AgentState
+from app.graph.nodes import llm_node
 from app.logger import setup_logger
 
 logger = setup_logger().bind(name='GRAPH')
@@ -8,10 +8,10 @@ logger = setup_logger().bind(name='GRAPH')
 def build_graph() -> StateGraph:
     logger.info("Building the graph...")
 
-    graph = StateGraph(AddState)
-    graph.add_node("add_numbers",add_numbers)
-    graph.set_entry_point("add_numbers")
-    graph.add_edge("add_numbers", END)
+    graph = StateGraph(AgentState)
+    graph.add_node("llm", llm_node)
+    graph.set_entry_point("llm")
+    graph.add_edge("llm", END)
 
     logger.success("Graph built successfully")
 

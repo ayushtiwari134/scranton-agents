@@ -45,7 +45,7 @@ def character_node(state: AgentState, character: str) -> AgentState:
 
     messages.append({"role": "user", "content": state.user_input})
 
-    response = llm.generate(messages)
+    response = llm.generate(str(messages))
 
     messages.append({"role": "assistant", "content": response})
 

@@ -3,22 +3,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.graph.graph import build_graph
-from app.state import AgentState
+from app.graph.state import AgentState
 from app.logger import setup_logger
-
 
 logger = setup_logger().bind(name="MAIN")
 
 
 def main():
-    logger.info("Starting the application...")
+    logger.info("Starting Office Agents app")
 
-    graph = build_graph()
+    graph = build_graph(character="michael")
 
-    final_state = graph.invoke({"user_input": "What do you think about paper sales this time? what should be the next steps?"})
+    state = AgentState(user_input="Why do you think you are a great manager?")
 
-    logger.info(f"Final State: {final_state}")
-    logger.success("Application finished.")
+    final_state = graph.invoke(state, config={"thread_id": "user_1"})
+
+    logger.success(f"Michael says: {final_state['response']}")
 
 
 if __name__ == "__main__":

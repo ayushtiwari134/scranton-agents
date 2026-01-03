@@ -59,6 +59,7 @@ class Chunk:
         return {
             "id": self.id,
             "character": self.character,
+            "text": self.text,
             "character_slug": self.character_slug,
             "chunk_type": self.chunk_type,
             "season": self.season,

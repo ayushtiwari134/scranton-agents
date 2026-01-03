@@ -35,14 +35,17 @@ def _normalize_record(record: dict) -> Chunk:
 
     required_fields = [
         "id",
-        "character",
-        "character_slug",
         "season",
         "episode",
         "ep_code",
         "content_type",
         "text",
     ]
+
+    content_type = record["content_type"]
+
+    if content_type in {"quote", "action", "persona_seed"}:
+        required_fields.extend(["character", "character_slug"])
 
     for field in required_fields:
         if field not in record:
@@ -54,8 +57,8 @@ def _normalize_record(record: dict) -> Chunk:
     return Chunk(
         id=record["id"],
         text=record["text"],
-        character=record["character"],
-        character_slug=record["character_slug"],
+        character=record.get("character", "NARRATOR"),
+        character_slug=record.get("character_slug", "narrator"),
         season=int(record["season"]),
         episode=int(record["episode"]),
         episode_code=record["ep_code"],

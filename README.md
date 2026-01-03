@@ -168,7 +168,6 @@ python main.py
 This project is evolving from a single-threaded REPL into a scalable API service.
 
 * [ ] **Persistence Layer Upgrade:** Migration from JSON to SQLite/PostgreSQL.
-* [ ] **RAG Integration:** Ingesting "The Office" scripts into a vector store for factual consistency.
 * [ ] **Retrieval Reranking:** Character-aware filtering and reranking of retrieved context.
 * [ ] **FastAPI Layer:** Exposing the graph via WebSocket endpoints.
 * [ ] **Multi-Agent Debate:** Implementing a router node to allow characters to converse with *each other*.

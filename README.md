@@ -1,7 +1,6 @@
+# Scranton Agent — High-Fidelity Persona Simulation Engine
 
-# 🏢 Scranton Agent — High-Fidelity Persona Simulation Engine
-
-> 🚧 **Work in Progress:** This project is currently in active development. The backend architecture is being iterated upon daily.
+> **Work in Progress:** This project is currently in active development. The backend architecture is being iterated upon daily.
 
 **Scranton Agent** is a deterministic, persona-driven agent backend designed to simulate complex character interactions using **LangGraph** and **LiteLLM**.
 
@@ -9,9 +8,9 @@ While the subject matter is comedic (The Office US), the architecture is strictl
 
 ---
 
-## 📖 Project Philosophy
+## Project Philosophy
 
-This system is not a chatbot; it is a **simulation engine**. It rejects the common \"black box\" approach to agent memory in favor of transparent, inspectable state machines.
+This system is not a chatbot; it is a **simulation engine**. It rejects the common "black box" approach to agent memory in favor of transparent, inspectable state machines.
 
 Inspired by the [PhiloAgents](https://theneuralmaze.substack.com/p/ai-agents-inside-a-videogame) framework, Scranton Agent enforces a strict separation of concerns:
 1.  **External Control:** Persona selection is driven by the client/interface, not the LLM.
@@ -20,7 +19,7 @@ Inspired by the [PhiloAgents](https://theneuralmaze.substack.com/p/ai-agents-ins
 
 ---
 
-## 🏗️ Technical Architecture
+## Technical Architecture
 
 The system is built on a modern, composable stack designed for observability and extensibility.
 
@@ -28,52 +27,41 @@ The system is built on a modern, composable stack designed for observability and
 |-----------|------------|---------|
 | **Orchestration** | [LangGraph](https://langchain-ai.github.io/langgraph/) | Cyclic graph execution and explicit state management. |
 | **Inference** | [LiteLLM](https://docs.litellm.ai/) | Standardized interface for 100+ LLM providers (OpenAI, Anthropic, Gemini, Ollama). |
+| **Embeddings** | LiteLLM / SentenceTransformers | Provider-agnostic embedding layer with optional local fallback for offline ingestion. |
+| **Vector Store** | FAISS (local) | Persistent semantic memory for retrieval-augmented generation (RAG). |
 | **Persistence** | Custom/JSON | Human-readable, crash-safe checkpointing (will be replaced with SQLite/Postgres soon). |
 | **Runtime** | Python 3.11+ | Type-safe implementation using Pydantic models. |
 
-### The State Model
+---
 
-Unlike standard chat threads, Scranton Agent maintains a **Multi-Persona State Object**. A single user session (thread) acts as a container for multiple distinct character memories.
+## Memory Architecture (Retrieval-Augmented Generation)
 
-*Note: The current JSON-based state storage is a temporary solution for the MVP to ensure human readability during debugging. It is scheduled to be replaced by a production-grade SQL backend.*
+In addition to short-term conversational memory, Scranton Agent maintains a **long-term semantic memory layer** built using Retrieval-Augmented Generation (RAG).
 
-```
-// Conceptual Schema
-{
-  \"user_input\": \"Why did Holly leave?\",
-  \"active_persona\": \"michael\",
-  \"characters\": {
-    \"michael\": { 
-      \"system_prompt\": \"You are Michael Scott...\",
-      \"memory\": [ ...conversation_history... ] 
-    },
-    \"dwight\":  { 
-      \"system_prompt\": \"You are Dwight Schrute...\",
-      \"memory\": [ ...conversation_history... ] 
-    },
-    \"jim\": { 
-      \"system_prompt\": \"You are Jim Halpert...\",
-      \"memory\": [ ...conversation_history... ] 
-    }
-  }
-}
-```
+Long-term knowledge is:
+- Ingested offline from structured episode data
+- Chunked into atomic knowledge units (quotes, actions, episode narration)
+- Embedded using a provider-agnostic embedding interface
+- Stored in a persistent FAISS vector index with aligned metadata
+- Retrieved deterministically at query time to ground persona responses
 
-This structure allows for seamless context switching—you can ask Dwight a question, then immediately turn to Michael, and the system correctly routes the context to the specific sub-graph of that character.
+This design ensures factual consistency and character fidelity without polluting the LLM’s active context window.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-* **🛡️ Isolated Context Windows:** Complete separation of narrative history between agents.
-* **💾 Atomic Checkpointing:** A custom persistence layer that ensures data integrity via atomic writes.
-* **🔌 Model Agnostic:** Switch between GPT-4o, Claude 3.5 Sonnet, or local Llama 3 models via environment variables.
-* **🔍 Observability Ready:** Explicit graph edges make debugging state transitions trivial compared to standard recursive agent loops.
-* **🧩 Extensible Roster:** Adding a new employee (e.g., Stanley or Creed) requires only a configuration update.
+* **Isolated Context Windows:** Complete separation of narrative history between agents.
+* **Atomic Checkpointing:** A custom persistence layer that ensures data integrity via atomic writes.
+* **Model Agnostic:** Switch between GPT-4o, Claude 3.5 Sonnet, Gemini, or local Llama models via environment variables.
+* **Retrieval-Augmented Memory:** Canonical episode knowledge retrieved via vector search rather than heuristic prompting.
+* **Offline-Safe Ingestion:** Local embedding fallback allows full ingestion without external API access.
+* **Observability Ready:** Explicit graph edges make debugging state transitions trivial compared to standard recursive agent loops.
+* **Extensible Roster:** Adding a new employee (e.g., Stanley or Creed) requires only a configuration update.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -82,31 +70,29 @@ This structure allows for seamless context switching—you can ask Dwight a ques
 
 ### 1. Installation
 
-```
-# Clone the repository
-git clone [https://github.com/ayushtiwari134/scranton-agents](https://github.com/ayushtiwari134/scranton-agents)
+Clone the repository:
+git clone https://github.com/ayushtiwari134/scranton-agents
 cd scranton-agents
 
-# Install dependencies
+Install dependencies:
 uv sync
-```
 
 ### 2. Configuration
 
-Create your local environment file by copying the example.
-
-```
+Create your local environment file by copying the example:
 cp .env.example .env
-```
-Open .env and add your API keys. Thanks to LiteLLM, you can use almost any provider (Gemini, OpenAI, Anthropic, etc.).
 
-### 3. Execution
+Open `.env` and add your API keys. Thanks to LiteLLM, you can use almost any provider (Gemini, OpenAI, Anthropic, etc.).
+
+### 3. Ingest Long-Term Memory
+
+This builds the persistent FAISS vector store used for retrieval:
+python -m app.rag.ingest dunderpedia_character_chunks.jsonl
+
+### 4. Execution
 
 Launch the terminal-based interactive session:
-
-```
 python main.py
-```
 
 **Sample Interaction:**
 
@@ -118,24 +104,25 @@ python main.py
 
 ---
 
-## 🧭 Roadmap & Future Engineering
+## Roadmap & Future Engineering
 
 This project is evolving from a single-threaded REPL into a scalable API service.
 
 * [ ] **Persistence Layer Upgrade:** Migration from JSON to SQLite/PostgreSQL.
 * [ ] **RAG Integration:** Ingesting "The Office" scripts into a vector store for factual consistency.
+* [ ] **Retrieval Reranking:** Character-aware filtering and reranking of retrieved context.
 * [ ] **FastAPI Layer:** Exposing the graph via WebSocket endpoints.
 * [ ] **Multi-Agent Debate:** Implementing a router node to allow characters to converse with *each other*.
 * [ ] **Observability:** Integration with Langfuse or Opik for trace monitoring.
 
 ---
 
-## 📜 License
+## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
-<div align=&quot;center&quot;>
-<sub>Built with ❤️ using LangGraph & LiteLLM. Inspired by the <a href="https://theneuralmaze.substack.com/p/ai-agents-inside-a-videogame" target="blank">PhiloAgents</a> Course.</sub>
+<div align="center">
+<sub>Built using LangGraph & LiteLLM. Inspired by the <a href="https://theneuralmaze.substack.com/p/ai-agents-inside-a-videogame" target="blank">PhiloAgents</a> Course.</sub>
 </div>

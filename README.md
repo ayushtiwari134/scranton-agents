@@ -40,12 +40,79 @@ In addition to short-term conversational memory, Scranton Agent maintains a **lo
 
 Long-term knowledge is:
 - Ingested offline from structured episode data
-- Chunked into atomic knowledge units (quotes, actions, episode narration)
+- Chunked into atomic knowledge units
 - Embedded using a provider-agnostic embedding interface
 - Stored in a persistent FAISS vector index with aligned metadata
 - Retrieved deterministically at query time to ground persona responses
 
 This design ensures factual consistency and character fidelity without polluting the LLM’s active context window.
+
+---
+
+## RAG Data Pipeline
+
+The RAG system is built on a **character-centric knowledge extraction pipeline** derived from *The Office (US)* fan wiki.
+
+### Source Data Collection
+
+Data is scraped from canonical episode and quote pages on the *The Office* fandom wiki, following this hierarchy:
+
+- **List of Quotes** page  
+- Season-level tables  
+- Episode-specific `*_Quotes` pages  
+
+This yields **speaker-attributed dialogue** at episode granularity, along with:
+- season and episode indices
+- episode titles and codes
+- source URLs for traceability
+
+Episode summaries are scraped separately and enriched with:
+- full fandom summaries
+- structured episode metadata
+- compressed LLM-generated abstractions
+
+---
+
+### Character-Centric Transformation
+
+Rather than storing data in an episode-centric format, all content is **restructured around characters**.
+
+For every character and every episode they appear in, the pipeline generates structured records that capture:
+- what the character *said*
+- what the character *did*
+- what was *narrated* about the episode context
+
+This enables persona-specific retrieval without heuristic prompt engineering.
+
+The final output of this process is a **single unified JSONL file**, where each line represents one atomic knowledge unit.
+
+---
+
+## Chunking Strategy
+
+All long-term knowledge is represented as **explicit, typed chunks**. Chunking is deterministic and schema-driven.
+
+Each chunk belongs to one of the following types:
+
+- **quote**  
+  Direct dialogue spoken by a specific character, extracted from episode quote pages.
+
+- **action**  
+  Sentence-level behavioral or situational descriptions derived from episode summaries where a character is mentioned.
+
+- **summary_line**  
+  Episode-level narration capturing important context that may involve multiple characters or none explicitly.
+
+- **persona_seed**  
+  High-signal composites generated per character per episode, combining key quotes, actions, and narrative context. These are intended for persona grounding and system prompt construction.
+
+Chunking rules:
+- `quote`, `action`, and `persona_seed` chunks are **character-scoped** and require a `character_slug`
+- `summary_line` chunks are **episode-scoped** and intentionally character-agnostic
+- Every chunk is episodically grounded (season, episode, title)
+- Chunk text is stored alongside embeddings and metadata to guarantee alignment at retrieval time
+
+This structure enables precise retrieval, filtering, and future reranking without ambiguity.
 
 ---
 
@@ -93,14 +160,6 @@ python -m app.rag.ingest dunderpedia_character_chunks.jsonl
 
 Launch the terminal-based interactive session:
 python main.py
-
-**Sample Interaction:**
-
-> **System:** Choose persona (michael / dwight / jim)
-> **User:** dwight
-> **System:** [Switched to Dwight Schrute]
-> **User:** What is the proper way to peel a beet?
-> **Dwight:** *[Scoffs]* False. You do not peel a beet. You roast it in its skin to retain the earthy nutrients...
 
 ---
 

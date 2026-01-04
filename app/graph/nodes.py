@@ -22,6 +22,25 @@ PERSONAS = {
     ),
 }
 
+TOOL_INSTRUCTIONS = """
+You have access to a tool called `retrieve_context`.
+
+You should call this tool ONLY when the user's question requires factual
+recall from past episodes, events, or character history (for example:
+who said something, why an event happened, or recalling a specific scene).
+
+Do NOT call the tool for:
+- casual conversation
+- opinions
+- jokes
+- hypotheticals
+- roleplay that does not depend on factual recall
+
+When you call the tool:
+- use the user's exact question as `user_input`
+- pass the current persona name as `persona`
+"""
+
 
 def character_node(state: AgentState, persona: str) -> AgentState:
     """
@@ -35,6 +54,9 @@ def character_node(state: AgentState, persona: str) -> AgentState:
         AgentState: Updated agent state with LLM response.
     """
     logger.info(f"Invoking persona node for {persona}")
+
+    system_prompt = PERSONAS[persona] + "\n\n" + TOOL_INSTRUCTIONS
+
     llm = get_llm()
 
     memory = state.personas.get(persona, CharacterMemory())
@@ -42,7 +64,7 @@ def character_node(state: AgentState, persona: str) -> AgentState:
     messages = memory.messages.copy()
 
     if not messages or messages[0]["role"] != "system":
-        messages.insert(0, {"role": "system", "content": PERSONAS[persona]})
+        messages.insert(0, {"role": "system", "content": system_prompt})
 
     messages.append({"role": "user", "content": state.user_input})
 

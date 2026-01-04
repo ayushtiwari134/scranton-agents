@@ -1,6 +1,8 @@
 from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode
 from app.graph.state import AgentState
 from app.graph.nodes import character_node
+from app.graph.tools.retrieval import retrieve_context
 from app.logger import setup_logger
 
 logger = setup_logger().bind(name="GRAPH")
@@ -17,9 +19,24 @@ def build_graph(persona: str):
 
     graph.add_node("persona", lambda state: character_node(state, persona))
 
-    graph.set_entry_point("persona")
-    graph.add_edge("persona", END)
+    tool_node = ToolNode(tools=[retrieve_context])
+    graph.add_node("retrieval_tool", tool_node)
 
+    graph.set_entry_point("persona")
+
+    graph.add_conditional_edges(
+        "persona",
+        tool_node.condition,
+        {
+            "retrieval_tool": "retrieval_tool",
+            END: END,
+        },
+    )
+
+    graph.add_edge(
+        "retrieval_tool",
+        "persona",
+    )
 
     compiled = graph.compile()
 

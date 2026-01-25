@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.logger import setup_logger
 from app.graph.graph import build_graph
 from app.memory.json_checkpointer import JsonCheckpointer
+import uuid
 
 logger = setup_logger().bind(name="MAIN")
 
@@ -48,9 +49,12 @@ def main():
     graph = build_graph()
     store = JsonCheckpointer("memory.json")
 
-    thread_id = persona  # persona-scoped memory
+    user_id = "user_1"
+    persona = persona
+    session_id = str(uuid.uuid4())
 
-    loaded = store.get(thread_id)
+    loaded = store.load(user_id, persona, session_id)
+
     state = (
         loaded
         if loaded
@@ -67,7 +71,7 @@ def main():
 
     final_state = graph.invoke(state)
 
-    store.put(thread_id, final_state)
+    store.save(user_id, persona, session_id, final_state)
 
     final_message = None
     for msg in reversed(final_state["messages"]):

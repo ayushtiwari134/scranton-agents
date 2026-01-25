@@ -1,39 +1,58 @@
 import json
 import os
-from typing import Optional, Dict, Any
-
+from typing import Optional
 from app.memory.serializer import to_json_safe
 
 
 class JsonCheckpointer:
     """
-    JSON-based LangGraph-compatible checkpointer keyed by thread_id.
+    Hierarchical JSON-based memory store.
+
+    Structure:
+    {
+        user_id: {
+            persona: {
+                session_id: state
+            }
+        }
+    }
     """
 
     def __init__(self, path: str = "memory.json"):
         self.path = path
 
         if not os.path.exists(self.path):
-            with open(self.path, "w") as f:
-                json.dump({}, f)
+            self._write({})
 
-    def get(self, thread_id: str) -> Optional[Dict[str, Any]]:
+    def _read(self) -> dict:
         """
-        Retrieve the stored state for a given thread_id.
+        Safely read JSON memory file.
         """
-        with open(self.path, "r") as f:
-            data = json.load(f)
+        try:
+            with open(self.path, "r") as f:
+                content = f.read().strip()
+                if not content:
+                    return {}
+                return json.loads(content)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {}
 
-        return data.get(thread_id)
-
-    def put(self, thread_id: str, state: Dict[str, Any]) -> None:
+    def _write(self, data: dict):
         """
-        Persist the state for a given thread_id.
+        Safely write JSON memory file.
         """
-        with open(self.path, "r") as f:
-            data = json.load(f)
-
-        data[thread_id] = to_json_safe(state)
-
         with open(self.path, "w") as f:
             json.dump(data, f, indent=2)
+
+    def load(self, user_id: str, persona: str, session_id: str) -> Optional[dict]:
+        data = self._read()
+        return data.get(user_id, {}).get(persona, {}).get(session_id)
+
+    def save(self, user_id: str, persona: str, session_id: str, state: dict):
+        data = self._read()
+
+        data.setdefault(user_id, {})
+        data[user_id].setdefault(persona, {})
+        data[user_id][persona][session_id] = to_json_safe(state)
+
+        self._write(data)

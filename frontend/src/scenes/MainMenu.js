@@ -1,222 +1,197 @@
-import { Scene } from 'phaser';
+import { Scene } from "phaser";
 
 export class MainMenu extends Scene {
-    constructor() {
-        super('MainMenu');
-    }
+  constructor() {
+    super("MainMenu");
+  }
 
-    create() {
-        this.add.image(0, 0, 'background').setOrigin(0, 0);
-        this.add.image(510, 260, 'logo').setScale(0.55);
+  create() {
+    this.createScaledBackground();
 
-        const centerX = this.cameras.main.width / 2;
-        const startY = 524;
-        const buttonSpacing = 70;
+    this.activeField = null;
+    this.userIdValue = "";
+    this.sessionIdValue = "";
+    this.cursorVisible = true;
 
-        this.createButton(centerX, startY, 'Let\'s Play!', () => {
-            this.scene.start('Game');
-        });
+    this.createInputSection();
+    this.createStartButton();
+    this.setupKeyboardInput();
+    this.startCursorBlink();
+  }
 
-        this.createButton(centerX, startY + buttonSpacing, 'Instructions', () => {
-            this.showInstructions();
-        });
+  createScaledBackground() {
+    const { width, height } = this.scale;
 
-        this.createButton(centerX, startY + buttonSpacing * 2, 'Support Philoagents', () => {
-            window.open('https://github.com/neural-maze/philoagents-course', '_blank');
-        });
-    }
+    this.background = this.add.image(width / 2, height / 2, "background");
 
-    createButton(x, y, text, callback) {
-        const buttonWidth = 350;
-        const buttonHeight = 60;
-        const cornerRadius = 20;
-        const maxFontSize = 28;
-        const padding = 10;
+    const scaleX = width / this.background.width;
+    const scaleY = height / this.background.height;
+    const scale = Math.max(scaleX, scaleY);
 
-        const shadow = this.add.graphics();
-        shadow.fillStyle(0x666666, 1);
-        shadow.fillRoundedRect(x - buttonWidth / 2 + 4, y - buttonHeight / 2 + 4, buttonWidth, buttonHeight, cornerRadius);
+    this.background.setScale(scale);
 
-        const button = this.add.graphics();
-        button.fillStyle(0xffffff, 1);
-        button.fillRoundedRect(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-        button.setInteractive(
-            new Phaser.Geom.Rectangle(x - buttonWidth / 2, y - buttonHeight / 2, buttonWidth, buttonHeight),
-            Phaser.Geom.Rectangle.Contains
-        );
+    this.scale.on("resize", (gameSize) => {
+      const { width, height } = gameSize;
 
-        let fontSize = maxFontSize;
-        let buttonText;
-        do {
-            if (buttonText) buttonText.destroy();
-            
-            buttonText = this.add.text(x, y, text, {
-                fontSize: `${fontSize}px`,
-                fontFamily: 'Arial',
-                color: '#000000',
-                fontStyle: 'bold'
-            }).setOrigin(0.5);
+      this.background.setPosition(width / 2, height / 2);
 
-            fontSize -= 1;
-        } while (buttonText.width > buttonWidth - padding && fontSize > 10);
+      const newScaleX = width / this.background.width;
+      const newScaleY = height / this.background.height;
+      const newScale = Math.max(newScaleX, newScaleY);
 
-        button.on('pointerover', () => {
-            this.updateButtonStyle(button, shadow, x, y, buttonWidth, buttonHeight, cornerRadius, true);
-            buttonText.y -= 2;
-        });
+      this.background.setScale(newScale);
+    });
+  }
 
-        button.on('pointerout', () => {
-            this.updateButtonStyle(button, shadow, x, y, buttonWidth, buttonHeight, cornerRadius, false);
-            buttonText.y += 2;
-        });
+  createInputSection() {
+    const centerX = this.cameras.main.width / 2;
+    const startY = 420;
 
-        button.on('pointerdown', callback);
-        
-        return { button, shadow, text: buttonText };
-    }
+    this.add.text(centerX, startY, "User ID", {
+      fontSize: "22px",
+      color: "#000000",
+      fontFamily: "Arial",
+    }).setOrigin(0.5);
 
-    updateButtonStyle(button, shadow, x, y, width, height, radius, isHover) {
-        button.clear();
-        shadow.clear();
-        
-        if (isHover) {
-            button.fillStyle(0x87CEEB, 1);
-            shadow.fillStyle(0x888888, 1);
-            shadow.fillRoundedRect(x - width / 2 + 2, y - height / 2 + 2, width, height, radius);
+    this.userBox = this.createInputBox(centerX, startY + 40);
+    this.userText = this.add.text(centerX - 130, startY + 25, "", {
+      fontSize: "22px",
+      color: "#000000",
+      fontFamily: "Arial",
+    });
+
+    this.add.text(centerX, startY + 110, "Session ID", {
+      fontSize: "22px",
+      color: "#000000",
+      fontFamily: "Arial",
+    }).setOrigin(0.5);
+
+    this.sessionBox = this.createInputBox(centerX, startY + 150);
+    this.sessionText = this.add.text(centerX - 130, startY + 135, "", {
+      fontSize: "22px",
+      color: "#000000",
+      fontFamily: "Arial",
+    });
+  }
+
+  createInputBox(centerX, y) {
+    const box = this.add.graphics();
+    box.fillStyle(0xffffff, 1);
+    box.fillRoundedRect(centerX - 150, y - 25, 300, 50, 12);
+
+    box.setInteractive(
+      new Phaser.Geom.Rectangle(centerX - 150, y - 25, 300, 50),
+      Phaser.Geom.Rectangle.Contains
+    );
+
+    box.on("pointerdown", () => {
+      if (box === this.userBox) {
+        this.activeField = "user";
+      } else {
+        this.activeField = "session";
+      }
+      this.updateBoxStyles();
+    });
+
+    return box;
+  }
+
+  updateBoxStyles() {
+    const centerX = this.cameras.main.width / 2;
+
+    const redraw = (box, y, isActive) => {
+      box.clear();
+      box.fillStyle(0xffffff, 1);
+      box.fillRoundedRect(centerX - 150, y - 25, 300, 50, 12);
+
+      if (isActive) {
+        box.lineStyle(3, 0x87ceeb, 1);
+        box.strokeRoundedRect(centerX - 150, y - 25, 300, 50, 12);
+      }
+    };
+
+    redraw(this.userBox, 460, this.activeField === "user");
+    redraw(this.sessionBox, 570, this.activeField === "session");
+  }
+
+  createStartButton() {
+    const centerX = this.cameras.main.width / 2;
+
+    const button = this.add.graphics();
+    button.fillStyle(0x87ceeb, 1);
+    button.fillRoundedRect(centerX - 150, 650, 300, 60, 15);
+
+    button.setInteractive(
+      new Phaser.Geom.Rectangle(centerX - 150, 650, 300, 60),
+      Phaser.Geom.Rectangle.Contains
+    );
+
+    this.add.text(centerX, 680, "Start Game", {
+      fontSize: "26px",
+      fontFamily: "Arial",
+      color: "#000000",
+      fontStyle: "bold",
+    }).setOrigin(0.5);
+
+    button.on("pointerdown", () => {
+      this.initializeIdentity();
+    });
+  }
+
+  setupKeyboardInput() {
+    this.input.keyboard.on("keydown", (event) => {
+      if (!this.activeField) return;
+
+      if (event.key === "Backspace") {
+        if (this.activeField === "user") {
+          this.userIdValue = this.userIdValue.slice(0, -1);
         } else {
-            button.fillStyle(0xffffff, 1);
-            shadow.fillStyle(0x666666, 1);
-            shadow.fillRoundedRect(x - width / 2 + 4, y - height / 2 + 4, width, height, radius);
+          this.sessionIdValue = this.sessionIdValue.slice(0, -1);
         }
-        
-        button.fillRoundedRect(x - width / 2, y - height / 2, width, height, radius);
-    }
+      } else if (event.key.length === 1) {
+        if (this.activeField === "user") {
+          this.userIdValue += event.key;
+        } else {
+          this.sessionIdValue += event.key;
+        }
+      }
 
-    showInstructions() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
-        const centerX = width / 2;
-        const centerY = height / 2;
-        
-        const elements = this.createInstructionPanel(centerX, centerY);
-        
-        const instructionContent = this.addInstructionContent(centerX, centerY, elements.panel);
-        elements.title = instructionContent.title;
-        elements.textElements = instructionContent.textElements;
-        
-        const closeElements = this.addCloseButton(centerX, centerY + 79, () => {
-            this.destroyInstructionElements(elements);
-        });
-        elements.closeButton = closeElements.button;
-        elements.closeText = closeElements.text;
-        
-        elements.overlay.on('pointerdown', () => {
-            this.destroyInstructionElements(elements);
-        });
-    }
-    
-    createInstructionPanel(centerX, centerY) {
-        const overlay = this.add.graphics();
-        overlay.fillStyle(0x000000, 0.7);
-        overlay.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
-        overlay.setInteractive(
-            new Phaser.Geom.Rectangle(0, 0, this.cameras.main.width, this.cameras.main.height),
-            Phaser.Geom.Rectangle.Contains
-        );
-        
-        const panel = this.add.graphics();
-        panel.fillStyle(0xffffff, 1);
-        panel.fillRoundedRect(centerX - 200, centerY - 150, 400, 300, 20);
-        panel.lineStyle(4, 0x000000, 1);
-        panel.strokeRoundedRect(centerX - 200, centerY - 150, 400, 300, 20);
-        
-        return { overlay, panel };
-    }
-    
-    addInstructionContent(centerX, centerY, panel) {
-        const title = this.add.text(centerX, centerY - 110, 'INSTRUCTIONS', {
-            fontSize: '28px',
-            fontFamily: 'Arial',
-            color: '#000000',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-        
-        const instructions = [
-            'Arrow keys for moving',
-            'SPACE for talking to philosophers',
-            'ESC for closing the dialogue'
-        ];
-        
-        const textElements = [];
-        let yPos = centerY - 59;
-        instructions.forEach(instruction => {
-            textElements.push(
-                this.add.text(centerX, yPos, instruction, {
-                    fontSize: '22px',
-                    fontFamily: 'Arial',
-                    color: '#000000'
-                }).setOrigin(0.5)
-            );
-            yPos += 40;
-        });
-        
-        return { title, textElements };
-    }
-    
-    addCloseButton(x, y, callback) {
-        const adjustedY = y + 10;
-        
-        const buttonWidth = 120;
-        const buttonHeight = 40;
-        const cornerRadius = 10;
-        
-        const closeButton = this.add.graphics();
-        closeButton.fillStyle(0x87CEEB, 1);
-        closeButton.fillRoundedRect(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-        closeButton.lineStyle(2, 0x000000, 1);
-        closeButton.strokeRoundedRect(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-        
-        const closeText = this.add.text(x, adjustedY, 'Close', {
-            fontSize: '20px',
-            fontFamily: 'Arial',
-            color: '#000000',
-            fontStyle: 'bold'
-        }).setOrigin(0.5);
-        
-        closeButton.setInteractive(
-            new Phaser.Geom.Rectangle(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight),
-            Phaser.Geom.Rectangle.Contains
-        );
-        
-        closeButton.on('pointerover', () => {
-            closeButton.clear();
-            closeButton.fillStyle(0x5CACEE, 1);
-            closeButton.fillRoundedRect(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-            closeButton.lineStyle(2, 0x000000, 1);
-            closeButton.strokeRoundedRect(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-        });
-        
-        closeButton.on('pointerout', () => {
-            closeButton.clear();
-            closeButton.fillStyle(0x87CEEB, 1);
-            closeButton.fillRoundedRect(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-            closeButton.lineStyle(2, 0x000000, 1);
-            closeButton.strokeRoundedRect(x - buttonWidth / 2, adjustedY - buttonHeight / 2, buttonWidth, buttonHeight, cornerRadius);
-        });
-        
-        closeButton.on('pointerdown', callback);
-        
-        return { button: closeButton, text: closeText };
-    }
-    
-    destroyInstructionElements(elements) {
-        elements.overlay.destroy();
-        elements.panel.destroy();
-        elements.title.destroy();
-        
-        elements.textElements.forEach(text => text.destroy());
-        
-        elements.closeButton.destroy();
-        elements.closeText.destroy();
-    }
+      this.updateInputDisplay();
+    });
+  }
+
+  updateInputDisplay() {
+    const userCursor =
+      this.activeField === "user" && this.cursorVisible ? "|" : "";
+    const sessionCursor =
+      this.activeField === "session" && this.cursorVisible ? "|" : "";
+
+    this.userText.setText(this.userIdValue + userCursor);
+    this.sessionText.setText(this.sessionIdValue + sessionCursor);
+  }
+
+  startCursorBlink() {
+    this.time.addEvent({
+      delay: 500,
+      loop: true,
+      callback: () => {
+        this.cursorVisible = !this.cursorVisible;
+        this.updateInputDisplay();
+      },
+    });
+  }
+
+  initializeIdentity() {
+    const user = this.userIdValue.trim();
+    const session = this.sessionIdValue.trim();
+
+    if (!user || !session) return;
+
+    window.APP_IDENTITY = {
+      user_id: user,
+      session_id: session,
+    };
+
+    this.scene.start("Game");
+  }
 }

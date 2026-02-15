@@ -51,7 +51,7 @@ async def conversation_node(
     )
 
     return {
-        "messages": response,
+        "messages": messages + [response],
         "final_response": response.content,
     }
 

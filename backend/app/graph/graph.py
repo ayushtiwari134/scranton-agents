@@ -1,5 +1,3 @@
-from functools import lru_cache
-
 from langgraph.graph import START, END, StateGraph
 from langgraph.prebuilt import tools_condition
 
@@ -7,12 +5,10 @@ from app.graph.state import AgentState
 from app.graph.nodes import (
     conversation_node,
     retrieved_context_summary_node,
-    final_response_node,
     retriever_node,
 )
 
 
-@lru_cache(maxsize=1)
 def build_graph():
     graph = StateGraph(AgentState)
 
@@ -34,4 +30,4 @@ def build_graph():
     graph.add_edge("retrieve_context", "summarize_context_node")
     graph.add_edge("summarize_context_node", "conversation_node")
 
-    return graph.compile()
+    return graph

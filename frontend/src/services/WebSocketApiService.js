@@ -1,161 +1,73 @@
 class WebSocketApiService {
+
   constructor() {
-    // Initialize connection-related properties
-    this.initializeConnectionProperties();
-    
-    // Set up WebSocket URL based on environment
-    this.baseUrl = this.determineWebSocketBaseUrl();
-  }
-
-  initializeConnectionProperties() {
     this.socket = null;
-    this.messageCallbacks = new Map();
     this.connected = false;
-    this.connectionPromise = null;
-    this.connectionTimeout = 10000;
+    this.callbacks = {};
+    this.baseUrl = this.getBaseUrl();
   }
 
-  determineWebSocketBaseUrl() {
-    const isHttps = window.location.protocol === 'https:';
-    
-    if (isHttps) {
-      console.log('Using GitHub Codespaces');
-      const currentHostname = window.location.hostname;
-      return `ws://${currentHostname.replace('8080', '8000')}`;
-    }
-    
-    return 'ws://localhost:8000';
+  getBaseUrl() {
+    const protocol =
+      window.location.protocol === "https:"
+        ? "wss:"
+        : "ws:";
+    return `${protocol}//localhost:8000/chat/ws`;
   }
 
   connect() {
-    if (this.connectionPromise) {
-      return this.connectionPromise;
-    }
+    return new Promise((resolve, reject) => {
 
-    this.connectionPromise = new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        if (this.socket) {
-          this.socket.close();
-        }
-        this.connectionPromise = null;
-        reject(new Error('WebSocket connection timeout'));
-      }, this.connectionTimeout);
+      this.socket = new WebSocket(this.baseUrl);
 
-      this.socket = new WebSocket(`${this.baseUrl}/ws/chat`);
-      
       this.socket.onopen = () => {
-        console.log('WebSocket connection established');
         this.connected = true;
-        clearTimeout(timeoutId);
         resolve();
       };
 
-      this.socket.onmessage = this.handleMessage.bind(this);
+      this.socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
 
-      this.socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        clearTimeout(timeoutId);
-        this.connectionPromise = null;
-        reject(error);
+        if (data.type === "token") {
+          this.callbacks.onToken?.(data.content);
+        }
+
+        if (data.type === "done") {
+          this.callbacks.onDone?.();
+        }
+
+        if (data.type === "error") {
+          console.error(data.message);
+        }
+      };
+
+      this.socket.onerror = (err) => {
+        reject(err);
       };
 
       this.socket.onclose = () => {
-        console.log('WebSocket connection closed');
         this.connected = false;
-        this.connectionPromise = null;
       };
     });
-
-    return this.connectionPromise;
   }
 
-  handleMessage(event) {
-    const data = JSON.parse(event.data);
-    
-    if (data.error) {
-      console.error('WebSocket error:', data.error);
-      return;
-    }
-    
-    if (data.streaming !== undefined) {
-      this.handleStreamingUpdate(data.streaming);
-      return;
-    }
-    
-    if (data.chunk) {
-      this.triggerCallback('chunk', data.chunk);
-      return;
-    }
-    
-    if (data.response) {
-      this.triggerCallback('message', data.response);
-    }
-  }
+  async sendMessage(payload, callbacks = {}) {
 
-  handleStreamingUpdate(isStreaming) {
-    const streamingCallback = this.messageCallbacks.get('streaming');
-    if (streamingCallback) {
-      streamingCallback(isStreaming);
+    if (!this.connected) {
+      await this.connect();
     }
-  }
 
-  triggerCallback(type, data) {
-    const callback = this.messageCallbacks.get(type);
-    if (callback) {
-      callback(data);
-    }
-  }
+    this.callbacks = callbacks;
 
-  async sendMessage(philosopher, message, callbacks = {}) {
-    try {
-      if (!this.connected) {
-        await this.connect();
-      }
-
-      this.registerCallbacks(callbacks);
-
-      this.socket.send(JSON.stringify({
-        message: message,
-        philosopher_id: philosopher.id
-      }));
-    } catch (error) {
-      console.error('Error sending message via WebSocket:', error);
-      return this.getFallbackResponse(philosopher);
-    }
-  }
-
-  registerCallbacks(callbacks) {
-    if (callbacks.onMessage) {
-      this.messageCallbacks.set('message', callbacks.onMessage);
-    }
-    
-    if (callbacks.onStreamingStart) {
-      this.messageCallbacks.set('streaming', (isStreaming) => {
-        if (isStreaming) {
-          callbacks.onStreamingStart();
-        } else if (callbacks.onStreamingEnd) {
-          callbacks.onStreamingEnd();
-        }
-      });
-    }
-    
-    if (callbacks.onChunk) {
-      this.messageCallbacks.set('chunk', callbacks.onChunk);
-    }
-  }
-
-  getFallbackResponse(philosopher) {
-    return "I'm so tired right now, I can't talk. I'm going to sleep now.";
+    this.socket.send(JSON.stringify(payload));
   }
 
   disconnect() {
     if (this.socket) {
       this.socket.close();
       this.connected = false;
-      this.connectionPromise = null;
-      this.messageCallbacks.clear();
     }
   }
 }
 
-export default new WebSocketApiService(); 
+export default new WebSocketApiService();

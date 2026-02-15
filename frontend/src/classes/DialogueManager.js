@@ -1,193 +1,228 @@
-import ApiService from '../services/ApiService';
 import WebSocketApiService from '../services/WebSocketApiService';
 
 class DialogueManager {
+
+  /**
+   * Manages dialogue lifecycle, streaming,
+   * persona routing, and keyboard interaction.
+   */
   constructor(scene) {
-    // Core properties
     this.scene = scene;
+
     this.dialogueBox = null;
-    this.activePhilosopher = null;
-    
-    // State management
+    this.activeCharacter = null;
+    this.activePersona = null;
+
+    this.userId = null;
+    this.sessionId = null;
+
     this.isTyping = false;
     this.isStreaming = false;
+
     this.currentMessage = '';
     this.streamingText = '';
-    
-    // Cursor properties
+
     this.cursorBlinkEvent = null;
     this.cursorVisible = true;
-    
-    // Connection management
-    this.hasSetupListeners = false;
-    this.disconnectTimeout = null;
+
+    this.listenersAttached = false;
   }
 
-  // === Initialization ===
-  
+  /**
+   * Initializes dialogue manager and loads identity.
+   */
   initialize(dialogueBox) {
     this.dialogueBox = dialogueBox;
-    
-    if (!this.hasSetupListeners) {
-      this.setupKeyboardListeners();
-      this.hasSetupListeners = true;
+    this.loadIdentity();
+
+    if (!this.listenersAttached) {
+      this.attachKeyboardListeners();
+      this.listenersAttached = true;
     }
   }
 
-  setupKeyboardListeners() {
+  /**
+   * Loads identity from global state.
+   */
+  loadIdentity() {
+    const identity = window.APP_IDENTITY || {
+      user_id: "guest",
+      session_id: "1"
+    };
+
+    this.userId = identity.user_id;
+    this.sessionId = identity.session_id;
+  }
+
+  /**
+   * Registers keyboard input handlers.
+   */
+  attachKeyboardListeners() {
     this.scene.input.keyboard.on('keydown', async (event) => {
+
+      if (event.key === 'Escape') {
+        this.closeDialogue();
+        return;
+      }
+
       if (!this.isTyping) {
-        if (this.isStreaming && (event.key === 'Space' || event.key === ' ')) {
+        if (this.isStreaming && (event.key === ' ' || event.key === 'Space')) {
           this.skipStreaming();
         }
         return;
       }
-    
-      this.handleKeyPress(event);
+
+      await this.handleTypingInput(event);
     });
   }
 
-  // === Input Handling ===
-  
-  async handleKeyPress(event) {
+  /**
+   * Starts dialogue session for AI character.
+   */
+  startDialogue(character) {
+    if (!character.persona) {
+      return;
+    }
+
+    this.activeCharacter = character;
+    this.activePersona = character.persona;
+
+    this.isTyping = true;
+    this.currentMessage = '';
+    this.cursorVisible = true;
+
+    this.dialogueBox.show('|', true);
+    this.startCursorBlink();
+  }
+
+  /**
+   * Continues dialogue after streaming.
+   */
+  continueDialogue() {
+    if (this.isStreaming) {
+      this.skipStreaming();
+      return;
+    }
+
+    if (!this.isTyping) {
+      this.restartTyping();
+    }
+  }
+
+  /**
+   * Handles keyboard typing.
+   */
+  async handleTypingInput(event) {
     if (event.key === 'Enter') {
-      await this.handleEnterKey();
-    } else if (event.key === 'Escape') {
-      this.closeDialogue();
-    } else if (event.key === 'Backspace') {
+      await this.submitMessage();
+    }
+    else if (event.key === 'Backspace') {
       this.currentMessage = this.currentMessage.slice(0, -1);
-      this.updateDialogueText();
-    } else if (event.key.length === 1) { // Single character keys
-      if (!this.isTyping) {
-        this.currentMessage = '';
-        this.isTyping = true;
-      }
-      
+      this.updateInputDisplay();
+    }
+    else if (event.key.length === 1) {
       this.currentMessage += event.key;
-      this.updateDialogueText();
+      this.updateInputDisplay();
     }
   }
 
-  async handleEnterKey() {
-    if (this.currentMessage.trim() !== '') {
-      this.dialogueBox.show('...', true);
-      this.stopCursorBlink();
-      
-      if (this.activePhilosopher.defaultMessage) {
-        await this.handleDefaultMessage();
-      } else {
-        await this.handleWebSocketMessage();
-      }
-      
-      this.currentMessage = '';
-      this.isTyping = false;
-    } else if (!this.isTyping) {
-      this.restartTypingPrompt();
+  /**
+   * Sends message to backend.
+   */
+  async submitMessage() {
+    if (!this.currentMessage.trim()) {
+      return;
     }
+
+    this.dialogueBox.show('...', true);
+    this.stopCursorBlink();
+    this.isTyping = false;
+
+    await this.streamResponse();
+
+    this.currentMessage = '';
   }
 
-  // === Message Processing ===
-  
-  async handleDefaultMessage() {
-    const apiResponse = this.activePhilosopher.defaultMessage;
-    this.dialogueBox.show('', true);
-    await this.streamText(apiResponse);
-  }
+  /**
+   * Streams backend response via WebSocket.
+   */
+  async streamResponse() {
 
-  async handleWebSocketMessage() {
-    this.dialogueBox.show('', true);
     this.isStreaming = true;
     this.streamingText = '';
-    
-    try {
-      await this.processWebSocketMessage();
-    } catch (error) {
-      console.error('WebSocket error:', error);
-      await this.fallbackToRegularApi();
-    } finally {
-      this.isTyping = false;
-    }
-  }
 
-  async processWebSocketMessage() {
-    await WebSocketApiService.connect();
-    
-    const callbacks = {
-      onMessage: () => { 
-        this.finishStreaming();
-      },
-      onChunk: (chunk) => {
-        this.streamingText += chunk;
-        this.dialogueBox.show(this.streamingText, true);
-      },
-      onStreamingStart: () => {
-        this.isStreaming = true;
-      },
-      onStreamingEnd: () => {
-        this.finishStreaming();
-      }
-    };
-    
     await WebSocketApiService.sendMessage(
-      this.activePhilosopher,
-      this.currentMessage,
-      callbacks
+      {
+        user_id: this.userId,
+        session_id: this.sessionId,
+        persona: this.activePersona,
+        message: this.currentMessage
+      },
+      {
+        onToken: (chunk) => {
+          this.streamingText += chunk;
+          this.dialogueBox.show(this.streamingText, true);
+        },
+        onDone: () => {
+          this.isStreaming = false;
+        }
+      }
     );
-    
+
     while (this.isStreaming) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 30));
     }
-    
-    this.currentMessage = '';
-    WebSocketApiService.disconnect();
+
+    this.finishStreaming();
   }
 
+  /**
+   * Finalizes streaming cycle.
+   */
   finishStreaming() {
-    this.isStreaming = false;
     this.dialogueBox.show(this.streamingText, true);
+    this.isTyping = false;
   }
 
-  async fallbackToRegularApi() {
-    const apiResponse = await ApiService.sendMessage(
-      this.activePhilosopher, 
-      this.currentMessage
-    );
-    await this.streamText(apiResponse);
-  }
-
-  // === UI Management ===
-  
-  updateDialogueText() {
-    const displayText = this.currentMessage + (this.cursorVisible ? '|' : '');
-    this.dialogueBox.show(displayText, true);
-  }
-
-  restartTypingPrompt() {
+  /**
+   * Resets typing state.
+   */
+  restartTyping() {
+    this.isTyping = true;
     this.currentMessage = '';
-    this.dialogueBox.show('|', true);
-    
-    this.stopCursorBlink();
     this.cursorVisible = true;
+
     this.startCursorBlink();
-    
-    this.updateDialogueText();
+    this.updateInputDisplay();
   }
 
-  // === Cursor Management ===
-  
+  /**
+   * Updates input line with blinking cursor.
+   */
+  updateInputDisplay() {
+    const text = this.currentMessage + (this.cursorVisible ? '|' : '');
+    this.dialogueBox.show(text, true);
+  }
+
+  /**
+   * Starts blinking cursor.
+   */
   startCursorBlink() {
     this.cursorBlinkEvent = this.scene.time.addEvent({
-      delay: 300,  
+      delay: 400,
       callback: () => {
-        if (this.dialogueBox.isVisible() && this.isTyping) {
+        if (this.isTyping) {
           this.cursorVisible = !this.cursorVisible;
-          this.updateDialogueText();
+          this.updateInputDisplay();
         }
       },
       loop: true
     });
   }
 
+  /**
+   * Stops blinking cursor.
+   */
   stopCursorBlink() {
     if (this.cursorBlinkEvent) {
       this.cursorBlinkEvent.remove();
@@ -195,94 +230,22 @@ class DialogueManager {
     }
   }
 
-  // === Dialogue Flow Control ===
-  
-  startDialogue(philosopher) {
-    this.cancelDisconnectTimeout();
-    
-    this.activePhilosopher = philosopher;
-    this.isTyping = true;
-    this.currentMessage = '';
-    
-    this.dialogueBox.show('|', true);
-    this.stopCursorBlink();
-    
-    this.cursorVisible = true;
-    this.startCursorBlink();
-  }
-
-  closeDialogue() {
-    this.dialogueBox.hide();
-    this.isTyping = false;
-    this.currentMessage = '';
-    this.isStreaming = false;
-    
-    this.stopCursorBlink();
-    this.scheduleDisconnect();
-  }
-
-  isInDialogue() {
-    return this.dialogueBox && this.dialogueBox.isVisible();
-  }
-
-  continueDialogue() {
-    if (!this.dialogueBox.isVisible()) return;
-    
-    if (this.isStreaming) {
-      this.skipStreaming();
-    } else if (!this.isTyping) {
-      this.isTyping = true;
-      this.currentMessage = '';
-      this.dialogueBox.show('', false);
-      this.restartTypingPrompt();
-    }
-  }
-
-  // === Text Streaming ===
-  
-  async streamText(text, speed = 30) {
-    this.isStreaming = true;
-    let displayedText = '';
-    
-    this.stopCursorBlink();
-    
-    for (let i = 0; i < text.length; i++) {
-      displayedText += text[i];
-      this.dialogueBox.show(displayedText, true);
-      
-      await new Promise(resolve => setTimeout(resolve, speed));
-      
-      if (!this.isStreaming) break;
-    }
-    
-    if (this.isStreaming) {
-      this.dialogueBox.show(text, true);
-    }
-    
-    this.isStreaming = false;
-    return true;
-  }
-
+  /**
+   * Skips streaming animation.
+   */
   skipStreaming() {
     this.isStreaming = false;
   }
 
-  // === Connection Management ===
-  
-  cancelDisconnectTimeout() {
-    if (this.disconnectTimeout) {
-      clearTimeout(this.disconnectTimeout);
-      this.disconnectTimeout = null;
-    }
-  }
-
-  scheduleDisconnect() {
-    this.cancelDisconnectTimeout();
-    
-    this.disconnectTimeout = setTimeout(() => {
-      WebSocketApiService.disconnect();
-    }, 5000);
+  /**
+   * Closes dialogue session.
+   */
+  closeDialogue() {
+    this.dialogueBox.hide();
+    this.isTyping = false;
+    this.currentMessage = '';
+    this.stopCursorBlink();
   }
 }
 
-export default DialogueManager; 
+export default DialogueManager;

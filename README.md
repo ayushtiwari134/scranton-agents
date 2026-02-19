@@ -302,7 +302,7 @@ npm run dev
 - Multi-persona graph orchestration  
 - Persistent memory isolation  
 - Async streaming inference  
-- Full-stack agent architecture  
+- Full-stack multi agent architecture  
 - Production-oriented backend design  
 
 This is not a simple chatbot wrapper.

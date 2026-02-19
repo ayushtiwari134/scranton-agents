@@ -1,5 +1,6 @@
 from langgraph.graph import START, END, StateGraph
 from langgraph.prebuilt import tools_condition
+from app.graph.conditions import retrieval_guard_condition
 
 from app.graph.state import AgentState
 from app.graph.nodes import (
@@ -20,10 +21,10 @@ def build_graph():
 
     graph.add_conditional_edges(
         "conversation_node",
-        tools_condition,
+        retrieval_guard_condition,
         {
-            "tools": "retrieve_context",
-            END: END,
+            "retrieve_context": "retrieve_context",
+            "__end__": END,
         },
     )
 

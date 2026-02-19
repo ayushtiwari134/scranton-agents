@@ -1,186 +1,322 @@
-# Scranton Agents — High-Fidelity Persona Simulation Engine
+# Scranton Agents — Multi-Persona Simulation Engine
 
-> **Work in Progress:** This project is currently in active development. The backend architecture is being iterated upon daily.
+> **Status:** Fully functional end-to-end system. Actively iterating on orchestration, scaling, and observability.
 
-**Scranton Agent** is a deterministic, persona-driven agent backend designed to simulate complex character interactions using **LangGraph** and **LiteLLM**.
+**Scranton Agents** is a stateful, multi-persona simulation engine built using **LangGraph**, **FastAPI**, **FAISS**, and a Phaser-based interactive frontend. While the subject matter is comedic (*The Office US*), the architecture is engineering-first. This project serves as a reference implementation for building memory-isolated, retrieval-augmented, streaming agent systems with explicit state management and deterministic orchestration.
 
-While the subject matter is comedic (The Office US), the architecture is strictly engineering-first. This project serves as a reference implementation for building stateful, multi-tenant agent systems where memory isolation, explicit state transitions, and provider agnosticism are paramount.
-
----
-
-## Project Philosophy
-
-This system is not a chatbot; it is a **simulation engine**. It rejects the common "black box" approach to agent memory in favor of transparent, inspectable state machines.
-
-Inspired by the [PhiloAgents](https://theneuralmaze.substack.com/p/ai-agents-inside-a-videogame) framework, Scranton Agent enforces a strict separation of concerns:
-1.  **External Control:** Persona selection is driven by the client/interface, not the LLM.
-2.  **Memory Isolation:** Michael Scott’s context window never bleeds into Dwight Schrute’s.
-3.  **Atomic Persistence:** State is serialized transactionally, preventing corruption during conversational turns.
+This system is **inspired by the PhiloAgents architecture**, but independently implemented and extended with production-oriented decisions around RAG ingestion, checkpointed memory, async streaming, and full-stack integration.
 
 ---
 
-## Technical Architecture
+# System Architecture
 
-The system is built on a modern, composable stack designed for observability and extensibility.
-
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Orchestration** | [LangGraph](https://langchain-ai.github.io/langgraph/) | Cyclic graph execution and explicit state management. |
-| **Inference** | [LiteLLM](https://docs.litellm.ai/) | Standardized interface for 100+ LLM providers (OpenAI, Anthropic, Gemini, Ollama). |
-| **Embeddings** | LiteLLM / SentenceTransformers | Provider-agnostic embedding layer with optional local fallback for offline ingestion. |
-| **Vector Store** | FAISS (local) | Persistent semantic memory for retrieval-augmented generation (RAG). |
-| **Persistence** | Custom/JSON | Human-readable, crash-safe checkpointing (will be replaced with SQLite/Postgres soon). |
-| **Runtime** | Python 3.11+ | Type-safe implementation using Pydantic models. |
-
----
-
-## Memory Architecture (Retrieval-Augmented Generation)
-
-In addition to short-term conversational memory, Scranton Agent maintains a **long-term semantic memory layer** built using Retrieval-Augmented Generation (RAG).
-
-Long-term knowledge is:
-- Ingested offline from structured episode data
-- Chunked into atomic knowledge units
-- Embedded using a provider-agnostic embedding interface
-- Stored in a persistent FAISS vector index with aligned metadata
-- Retrieved deterministically at query time to ground persona responses
-
-This design ensures factual consistency and character fidelity without polluting the LLM’s active context window.
+Frontend (Phaser Game UI)  
+→ WebSocket  
+→ FastAPI  
+→ LangGraph  
+→ Tool Nodes (Retriever)  
+→ FAISS Vector Store  
+→ LLM (ChatGroq via LiteLLM-compatible interface)  
+→ SQLite Checkpointer  
+→ Streaming Tokens Back to Client  
 
 ---
 
-## RAG Data Pipeline
+# Data & RAG Pipeline
 
-The RAG system is built on a **character-centric knowledge extraction pipeline** derived from *The Office (US)* fan wiki.
+The system begins with structured knowledge extraction from *The Office (US)* fandom wiki.
 
-### Source Data Collection
+## 1. Web Scraping & Dataset Construction
 
-Data is scraped from canonical episode and quote pages on the *The Office* fandom wiki, following this hierarchy:
+A hierarchical scraping strategy extracts:
 
-- **List of Quotes** page  
 - Season-level tables  
-- Episode-specific `*_Quotes` pages  
+- Episode summaries  
+- Quote pages  
+- Speaker-attributed dialogue  
+- Episode metadata  
 
-This yields **speaker-attributed dialogue** at episode granularity, along with:
-- season and episode indices
-- episode titles and codes
-- source URLs for traceability
+The result is a structured dataset containing:
 
-Episode summaries are scraped separately and enriched with:
-- full fandom summaries
-- structured episode metadata
-- compressed LLM-generated abstractions
-
----
-
-### Character-Centric Transformation
-
-Rather than storing data in an episode-centric format, all content is **restructured around characters**.
-
-For every character and every episode they appear in, the pipeline generates structured records that capture:
-- what the character *said*
-- what the character *did*
-- what was *narrated* about the episode context
-
-This enables persona-specific retrieval without heuristic prompt engineering.
-
-The final output of this process is a **single unified JSONL file**, where each line represents one atomic knowledge unit.
+- Season and episode indices  
+- Episode titles  
+- Character-attributed quotes  
+- Scene-level summaries  
+- Source URLs for traceability  
 
 ---
 
-## Chunking Strategy
+## 2. Character-Centric Transformation
 
-All long-term knowledge is represented as **explicit, typed chunks**. Chunking is deterministic and schema-driven.
+Rather than storing content episode-wise, all data is restructured around characters.
 
-Each chunk belongs to one of the following types:
+Each knowledge unit captures:
 
-- **quote**  
-  Direct dialogue spoken by a specific character, extracted from episode quote pages.
+- What the character said  
+- What the character did  
+- What happened contextually in the episode  
 
-- **action**  
-  Sentence-level behavioral or situational descriptions derived from episode summaries where a character is mentioned.
+This enables persona-aware retrieval without heuristic prompt engineering.
 
-- **summary_line**  
-  Episode-level narration capturing important context that may involve multiple characters or none explicitly.
+All content is transformed into a unified `JSONL` file:
 
-- **persona_seed**  
-  High-signal composites generated per character per episode, combining key quotes, actions, and narrative context. These are intended for persona grounding and system prompt construction.
+`dunderpedia_character_chunks.jsonl`
 
-Chunking rules:
-- `quote`, `action`, and `persona_seed` chunks are **character-scoped** and require a `character_slug`
-- `summary_line` chunks are **episode-scoped** and intentionally character-agnostic
-- Every chunk is episodically grounded (season, episode, title)
-- Chunk text is stored alongside embeddings and metadata to guarantee alignment at retrieval time
 
-This structure enables precise retrieval, filtering, and future reranking without ambiguity.
+Each line represents a deterministic, typed knowledge unit.
 
 ---
 
-## Key Features
+## 3. Chunking Strategy
 
-* **Isolated Context Windows:** Complete separation of narrative history between agents.
-* **Atomic Checkpointing:** A custom persistence layer that ensures data integrity via atomic writes.
-* **Model Agnostic:** Switch between GPT-4o, Claude 3.5 Sonnet, Gemini, or local Llama models via environment variables.
-* **Retrieval-Augmented Memory:** Canonical episode knowledge retrieved via vector search rather than heuristic prompting.
-* **Offline-Safe Ingestion:** Local embedding fallback allows full ingestion without external API access.
-* **Observability Ready:** Explicit graph edges make debugging state transitions trivial compared to standard recursive agent loops.
-* **Extensible Roster:** Adding a new employee (e.g., Stanley or Creed) requires only a configuration update.
+Chunks are explicitly typed:
 
----
+- `quote`
+- `action`
+- `summary_line`
+- `persona_seed`
 
-## Quick Start
+Rules:
 
-### Prerequisites
+- `quote`, `action`, and `persona_seed` are character-scoped
+- `summary_line` is episode-scoped
+- Every chunk is episodically grounded
+- Metadata is stored alongside embeddings for alignment
 
-* Python 3.10+
-* `uv` (recommended) or `pip`
-
-### 1. Installation
-
-Clone the repository:
-git clone https://github.com/ayushtiwari134/scranton-agents
-cd scranton-agents
-
-Install dependencies:
-uv sync
-
-### 2. Configuration
-
-Create your local environment file by copying the example:
-cp .env.example .env
-
-Open `.env` and add your API keys. Thanks to LiteLLM, you can use almost any provider (Gemini, OpenAI, Anthropic, etc.).
-
-### 3. Ingest Long-Term Memory
-
-This builds the persistent FAISS vector store used for retrieval:
-python -m app.rag.ingest dunderpedia_character_chunks.jsonl
-
-### 4. Execution
-
-Launch the terminal-based interactive session:
-python main.py
+This schema-driven chunking ensures precise retrieval and future reranking compatibility.
 
 ---
 
-## Roadmap & Future Engineering
+## 4. Embeddings & FAISS Vector Store
 
-This project is evolving from a single-threaded REPL into a scalable API service.
+The ingestion pipeline:
 
-* [ ] **Persistence Layer Upgrade:** Migration from JSON to SQLite/PostgreSQL.
-* [ ] **Retrieval Reranking:** Character-aware filtering and reranking of retrieved context.
-* [ ] **FastAPI Layer:** Exposing the graph via WebSocket endpoints.
-* [ ] **Multi-Agent Debate:** Implementing a router node to allow characters to converse with *each other*.
-* [ ] **Observability:** Integration with Langfuse or Opik for trace monitoring.
+1. Loads JSONL data  
+2. Converts chunks into embedding-ready format  
+3. Generates embeddings (local SentenceTransformers fallback supported)  
+4. Stores vectors in a persistent FAISS index  
+5. Aligns metadata with embeddings  
+
+Build the vector store:
+
+`python -m app.rag.ingest dunderpedia_character_chunks.jsonl`
+
+
+The FAISS index is stored in the backend directory and used deterministically at runtime.
 
 ---
 
-## License
+# Multi-Persona Graph Architecture
 
-Distributed under the MIT License. See `LICENSE` for more information.
+The backend is orchestrated using **LangGraph**, with an explicit `AgentState` extending `MessagesState`.
+
+### State Structure
+
+- `persona`
+- `user_input`
+- `messages` (append-only)
+- `retrieved_chunks`
+- `context_summary`
+- `conversation_summary`
+- `final_response`
+
+There are no hidden flags, no implicit branching, and no cross-persona memory leakage.
+
+---
+
+## Graph Nodes
+
+- `conversation_node`
+- `retrieve_context` (ToolNode)
+- `summarize_context_node`
+
+Edges are explicitly defined, including conditional routing to retrieval tools.
+
+Each persona operates within its own thread ID:
+
+`user_id:persona:session_id`
+
+
+This guarantees strict memory isolation across sessions and characters.
+
+---
+
+# Memory & Persistence
+
+## Short-Term Memory
+Maintained through `MessagesState` and append-only conversation history.
+
+## Long-Term Memory
+Powered by FAISS retrieval grounded in episodic metadata.
+
+## Transactional Checkpointing
+Implemented using: `AsyncSqliteSaver`
+
+
+All conversational state is persisted atomically to `memory.sqlite`, ensuring:
+
+- Crash safety  
+- Resume capability  
+- Persona isolation  
+- Multi-tenant session support  
+
+---
+
+# Inference Layer
+
+LLM inference is handled through a ChatGroq-compatible interface (LiteLLM-style provider abstraction).
+
+Features:
+
+- Provider agnostic
+- Async execution
+- Token streaming
+- Configurable model switching
+
+Streaming responses are delivered token-by-token over WebSocket.
+
+---
+
+# FastAPI & WebSocket Layer
+
+The backend exposes:
+```
+POST /chat/
+WS /chat/ws
+```
+
+
+The WebSocket endpoint:
+
+- Accepts persona-scoped payloads
+- Streams `token` messages
+- Emits `done` signals
+- Supports concurrent sessions
+- Integrates with LangGraph’s async execution
+
+This replaces the initial REPL-based prototype with a production-ready API service.
+
+---
+
+# Frontend (Phaser Game Interface)
+
+The frontend is intentionally lightweight and functions as a simulation interface over the backend.
+
+Features:
+
+- User ID and Session ID capture
+- Persona-to-character mapping
+- Real-time WebSocket streaming
+- Token-by-token response rendering
+- ESC to close dialogue
+- Space to continue interaction
+- WSAD player movement
+- Map-based NPC spawning
+- Clean background scaling and UI handling
+
+Each character sprite maps to a backend persona:
+
+- `michael`
+- `jim`
+- `dwight`
+
+---
+
+## Screenshots
+
+### Main Menu
+
+![Main Menu Screenshot](./images/Screenshot%202026-02-19%20at%204.23.01 PM.png)
+
+### In-Game Conversation
+
+![In-Game Screenshot](./images/Screenshot%202026-02-19%20at%204.22.16 PM.png)
+
+---
+
+# Engineering Highlights
+
+- Graph-based orchestration instead of recursive agent loops
+- Deterministic state transitions
+- Persona-scoped memory isolation
+- Structured RAG ingestion pipeline
+- Metadata-aligned embeddings
+- Async token streaming over WebSockets
+- SQLite-backed atomic checkpointing
+- Clean separation between semantic state and control flow
+- Inspired by PhiloAgents, independently implemented and extended
+
+---
+
+# Quick Start
+
+## Prerequisites
+
+- Python 3.10+
+- `uv`
+- Node.js (for frontend)
+
+---
+# Backend
+
+Go into the backend directory
+
+`cd backend/`
+
+## 1. Install Backend
+`uv sync`
+
+---
+
+## 2. Configure Environment
+`cp .env.example .env`
+
+Add your API keys.
+
+---
+
+## 3. Build Vector Store
+`python -m app.rag.ingest dunderpedia_character_chunks.jsonl`
+
+---
+
+## 4. Run Backend
+`python main.py`
+
+
+---
+
+# Frontend
+
+```
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+# What This Project Demonstrates
+
+- End-to-end RAG system construction  
+- Multi-persona graph orchestration  
+- Persistent memory isolation  
+- Async streaming inference  
+- Full-stack agent architecture  
+- Production-oriented backend design  
+
+This is not a simple chatbot wrapper.
+
+It is a structured, memory-persistent, multi-agent simulation framework.
+
+---
+
+# License
+
+MIT License.
 
 ---
 
 <div align="center">
-<sub>Built using LangGraph & LiteLLM. Inspired by the <a href="https://theneuralmaze.substack.com/p/ai-agents-inside-a-videogame" target="blank">PhiloAgents</a> Course.</sub>
+<sub>Built with LangGraph, FastAPI, FAISS, SQLite & Phaser. Inspired by the PhiloAgents course, independently implemented.</sub>
 </div>

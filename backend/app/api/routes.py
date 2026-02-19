@@ -24,13 +24,13 @@ async def chat(
     if x_user_id is None:
         raise HTTPException(status_code=400, detail="X-User-Id header is required")
 
-    graph = build_graph()
+    graph = build_graph().compile()
 
     thread_id = f"{x_user_id}:{payload.persona}:{payload.session_id}"
 
     config = {"configurable": {"thread_id": thread_id}}
 
-    result = await graph.ainvoke(
+    result = graph.astream(
         {
             "user_input": payload.message,
             "persona": payload.persona,

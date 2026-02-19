@@ -43,3 +43,5 @@ class AgentState(MessagesState):
     conversation_summary: Optional[str] = None
     persona_memory: Optional[Dict[str, Any]] = None
     final_response: Optional[str] = None
+    retrieval_attempts: int = 0
+    max_retrieval_attempts: int = 3

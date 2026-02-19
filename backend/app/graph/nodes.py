@@ -71,6 +71,7 @@ def retrieved_context_summary_node(state: AgentState) -> AgentState:
     return {
         **state,
         "context_summary": ai_message.content,
+        "retrieval_attempts": state.get("retrieval_attempts", 0) + 1,
     }
 
 

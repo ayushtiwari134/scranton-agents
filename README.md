@@ -230,7 +230,7 @@ Each character sprite maps to a backend persona:
 
 ### In-Game Conversation
 
-![In-Game Screenshot](./images/Screenshot%2026-02-19%20at%204.22.53 PM.png)
+![In-Game Screenshot](./images/Screenshot%202026-02-19%20at%204.22.53%E2%80%AFPM.png)
 
 ---
 
